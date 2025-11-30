@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Music, Clock, Plus, Check, ChevronLeft, ChevronRight, Play, Home, Settings } from 'lucide-react';
+import React, { useState } from 'react';
+import { Calendar, Music, Clock, Plus, Check, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 
 export default function PracticeTrackerHome() {
   // Get current date info
@@ -198,166 +198,11 @@ export default function PracticeTrackerHome() {
     setViewMode(prev => prev === 'week' ? 'month' : 'week');
   };
   
-  // Tuner state and logic
-  const [isListening, setIsListening] = useState(false);
-  const [detectedNote, setDetectedNote] = useState('');
-  const [detectedFrequency, setDetectedFrequency] = useState(0);
-  const [cents, setCents] = useState(0);
-  const [referenceA4, setReferenceA4] = useState(440);
-  const audioContextRef = useRef(null);
-  const analyserRef = useRef(null);
-  const microphoneRef = useRef(null);
-  const animationFrameRef = useRef(null);
-  
-  const noteStrings = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
-  
-  // Calculate note from frequency
-  const getNote = (frequency) => {
-    const noteNum = 12 * (Math.log(frequency / referenceA4) / Math.log(2));
-    const noteIndex = Math.round(noteNum) + 9;
-    const octave = Math.floor(noteIndex / 12) + 4;
-    const note = noteStrings[((noteIndex % 12) + 12) % 12];
-    return { note, octave };
-  };
-  
-  // Calculate cents (how far off from perfect pitch)
-  const getCents = (frequency, note, octave) => {
-    const noteIndex = noteStrings.indexOf(note) - 9;
-    const notesFromA4 = noteIndex + (octave - 4) * 12;
-    const expectedFreq = referenceA4 * Math.pow(2, notesFromA4 / 12);
-    const cents = 1200 * Math.log2(frequency / expectedFreq);
-    return Math.round(cents);
-  };
-  
-  // Auto-correlation algorithm for pitch detection
-  const autoCorrelate = (buffer, sampleRate) => {
-    let SIZE = buffer.length;
-    let rms = 0;
-    
-    for (let i = 0; i < SIZE; i++) {
-      const val = buffer[i];
-      rms += val * val;
-    }
-    rms = Math.sqrt(rms / SIZE);
-    
-    if (rms < 0.01) return -1;
-    
-    let r1 = 0, r2 = SIZE - 1, thres = 0.2;
-    for (let i = 0; i < SIZE / 2; i++) {
-      if (Math.abs(buffer[i]) < thres) { r1 = i; break; }
-    }
-    for (let i = 1; i < SIZE / 2; i++) {
-      if (Math.abs(buffer[SIZE - i]) < thres) { r2 = SIZE - i; break; }
-    }
-    
-    buffer = buffer.slice(r1, r2);
-    SIZE = buffer.length;
-    
-    const c = new Array(SIZE).fill(0);
-    for (let i = 0; i < SIZE; i++) {
-      for (let j = 0; j < SIZE - i; j++) {
-        c[i] = c[i] + buffer[j] * buffer[j + i];
-      }
-    }
-    
-    let d = 0;
-    while (c[d] > c[d + 1]) d++;
-    
-    let maxval = -1, maxpos = -1;
-    for (let i = d; i < SIZE; i++) {
-      if (c[i] > maxval) {
-        maxval = c[i];
-        maxpos = i;
-      }
-    }
-    
-    let T0 = maxpos;
-    
-    const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
-    const a = (x1 + x3 - 2 * x2) / 2;
-    const b = (x3 - x1) / 2;
-    if (a) T0 = T0 - b / (2 * a);
-    
-    return sampleRate / T0;
-  };
-  
-  // Update pitch detection
-  const updatePitch = () => {
-    if (!analyserRef.current) return;
-    
-    const analyser = analyserRef.current;
-    const buffer = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(buffer);
-    
-    const frequency = autoCorrelate(buffer, audioContextRef.current.sampleRate);
-    
-    if (frequency > 0 && frequency < 2000) {
-      const { note, octave } = getNote(frequency);
-      const centsOff = getCents(frequency, note, octave);
-      
-      setDetectedNote(`${note}${octave}`);
-      setDetectedFrequency(Math.round(frequency * 10) / 10);
-      setCents(centsOff);
-    }
-    
-    animationFrameRef.current = requestAnimationFrame(updatePitch);
-  };
-  
-  // Start listening
-  const startListening = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
-      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 2048;
-      
-      microphoneRef.current = audioContextRef.current.createMediaStreamSource(stream);
-      microphoneRef.current.connect(analyserRef.current);
-      
-      setIsListening(true);
-      updatePitch();
-    } catch (err) {
-      console.error('Error accessing microphone:', err);
-      alert('Please allow microphone access to use the tuner');
-    }
-  };
-  
-  // Stop listening
-  const stopListening = () => {
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-    }
-    
-    if (microphoneRef.current) {
-      microphoneRef.current.disconnect();
-    }
-    
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-    }
-    
-    setIsListening(false);
-    setDetectedNote('');
-    setDetectedFrequency(0);
-    setCents(0);
-  };
-  
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (isListening) {
-        stopListening();
-      }
-    };
-  }, [isListening]);
-  
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
-      {currentPage === 'home' && (
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+      {/* Header */}
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <Music className="w-8 h-8 text-purple-600" />
@@ -592,10 +437,7 @@ export default function PracticeTrackerHome() {
         )}
         
         {/* Start Practice Button */}
-        <button 
-          onClick={() => setCurrentPage('tuner')}
-          className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all mt-6 flex items-center justify-center gap-3"
-        >
+        <button className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all mt-6 flex items-center justify-center gap-3">
           <Play className="w-6 h-6" fill="white" />
           Start Practice
         </button>
