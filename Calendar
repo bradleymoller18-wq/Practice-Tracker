@@ -1,1 +1,661 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Calendar, Music, Clock, Plus, Check, ChevronLeft, ChevronRight, Play, Home, Settings } from 'lucide-react';
 
+export default function PracticeTrackerHome() {
+  // Get current date info
+  const today = new Date();
+  
+  // State for current page
+  const [currentPage, setCurrentPage] = useState('home'); // 'home' or 'tuner'
+  
+  // State to track which week we're viewing (0 = current week, -1 = last week, 1 = next week, etc.)
+  const [weekOffset, setWeekOffset] = useState(0);
+  
+  // State to track practice sessions for each day (using date strings as keys)
+  const [practiceData, setPracticeData] = useState({});
+  
+  // State for selected day (to add practice info)
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [tempMinutes, setTempMinutes] = useState('');
+  const [tempNotes, setTempNotes] = useState('');
+  
+  // State for view mode (week or month)
+  const [viewMode, setViewMode] = useState('week'); // 'week' or 'month'
+  const [monthOffset, setMonthOffset] = useState(0); // For month navigation
+  
+  // Days of the week
+  const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const fullDays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  
+  // Calculate dates for the viewing week (based on weekOffset)
+  const getWeekDates = () => {
+    const week = [];
+    const startOfWeek = new Date(today);
+    // Go to the start of current week (Sunday)
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    // Then apply the week offset
+    startOfWeek.setDate(startOfWeek.getDate() + (weekOffset * 7));
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      week.push(date);
+    }
+    return week;
+  };
+  
+  const weekDates = getWeekDates();
+  
+  // Helper function to create a date key (YYYY-MM-DD format)
+  const getDateKey = (date) => {
+    return date.toISOString().split('T')[0];
+  };
+  
+  // Check if a date is today
+  const isToday = (date) => {
+    return getDateKey(date) === getDateKey(today);
+  };
+  
+  // Get practice data for a specific date
+  const getPracticeForDate = (date) => {
+    const key = getDateKey(date);
+    return practiceData[key] || { practiced: false, minutes: 0, notes: '' };
+  };
+  
+  // Toggle practice completion for a day
+  const togglePractice = (date) => {
+    const key = getDateKey(date);
+    setPracticeData(prev => ({
+      ...prev,
+      [key]: {
+        ...prev[key],
+        practiced: !prev[key]?.practiced
+      }
+    }));
+  };
+  
+  // Open modal to add practice details
+  const openPracticeModal = (date) => {
+    setSelectedDay(date);
+    const dayData = getPracticeForDate(date);
+    setTempMinutes(dayData.minutes || '');
+    setTempNotes(dayData.notes || '');
+  };
+  
+  // Save practice details
+  const savePracticeDetails = () => {
+    if (selectedDay !== null) {
+      const key = getDateKey(selectedDay);
+      setPracticeData(prev => ({
+        ...prev,
+        [key]: {
+          practiced: true,
+          minutes: parseInt(tempMinutes) || 0,
+          notes: tempNotes
+        }
+      }));
+      setSelectedDay(null);
+      setTempMinutes('');
+      setTempNotes('');
+    }
+  };
+  
+  // Calculate weekly stats for the current viewing week
+  const calculateWeekStats = () => {
+    let totalMinutes = 0;
+    let daysPracticed = 0;
+    
+    weekDates.forEach(date => {
+      const data = getPracticeForDate(date);
+      if (data.practiced) {
+        daysPracticed++;
+        totalMinutes += data.minutes;
+      }
+    });
+    
+    return { totalMinutes, daysPracticed };
+  };
+  
+  const { totalMinutes, daysPracticed } = calculateWeekStats();
+  
+  // Navigation functions
+  const goToPreviousWeek = () => setWeekOffset(prev => prev - 1);
+  const goToNextWeek = () => setWeekOffset(prev => prev + 1);
+  const goToCurrentWeek = () => setWeekOffset(0);
+  
+  // Get month and year for display
+  const getWeekLabel = () => {
+    const firstDay = weekDates[0];
+    const lastDay = weekDates[6];
+    
+    const firstMonth = firstDay.toLocaleString('default', { month: 'short' });
+    const lastMonth = lastDay.toLocaleString('default', { month: 'short' });
+    const year = lastDay.getFullYear();
+    
+    if (firstMonth === lastMonth) {
+      return `${firstMonth} ${year}`;
+    } else {
+      return `${firstMonth} - ${lastMonth} ${year}`;
+    }
+  };
+  
+  // Month view functions
+  const getCurrentMonth = () => {
+    const date = new Date(today);
+    date.setMonth(date.getMonth() + monthOffset);
+    return date;
+  };
+  
+  const getMonthDays = () => {
+    const month = getCurrentMonth();
+    const year = month.getFullYear();
+    const monthIndex = month.getMonth();
+    
+    // First day of the month
+    const firstDay = new Date(year, monthIndex, 1);
+    // Last day of the month
+    const lastDay = new Date(year, monthIndex + 1, 0);
+    
+    // Days to show from previous month
+    const startPadding = firstDay.getDay();
+    // Days to show from next month
+    const endPadding = 6 - lastDay.getDay();
+    
+    const days = [];
+    
+    // Previous month days
+    const prevMonthLastDay = new Date(year, monthIndex, 0);
+    for (let i = startPadding - 1; i >= 0; i--) {
+      const date = new Date(year, monthIndex - 1, prevMonthLastDay.getDate() - i);
+      days.push({ date, isCurrentMonth: false });
+    }
+    
+    // Current month days
+    for (let i = 1; i <= lastDay.getDate(); i++) {
+      const date = new Date(year, monthIndex, i);
+      days.push({ date, isCurrentMonth: true });
+    }
+    
+    // Next month days
+    for (let i = 1; i <= endPadding; i++) {
+      const date = new Date(year, monthIndex + 1, i);
+      days.push({ date, isCurrentMonth: false });
+    }
+    
+    return days;
+  };
+  
+  const getMonthLabel = () => {
+    const month = getCurrentMonth();
+    return month.toLocaleString('default', { month: 'long', year: 'numeric' });
+  };
+  
+  const goToPreviousMonth = () => setMonthOffset(prev => prev - 1);
+  const goToNextMonth = () => setMonthOffset(prev => prev + 1);
+  const goToCurrentMonth = () => setMonthOffset(0);
+  
+  const toggleView = () => {
+    setViewMode(prev => prev === 'week' ? 'month' : 'week');
+  };
+  
+  // Tuner state and logic
+  const [isListening, setIsListening] = useState(false);
+  const [detectedNote, setDetectedNote] = useState('');
+  const [detectedFrequency, setDetectedFrequency] = useState(0);
+  const [cents, setCents] = useState(0);
+  const [referenceA4, setReferenceA4] = useState(440);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const microphoneRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  
+  const noteStrings = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+  
+  // Calculate note from frequency
+  const getNote = (frequency) => {
+    const noteNum = 12 * (Math.log(frequency / referenceA4) / Math.log(2));
+    const noteIndex = Math.round(noteNum) + 9;
+    const octave = Math.floor(noteIndex / 12) + 4;
+    const note = noteStrings[((noteIndex % 12) + 12) % 12];
+    return { note, octave };
+  };
+  
+  // Calculate cents (how far off from perfect pitch)
+  const getCents = (frequency, note, octave) => {
+    const noteIndex = noteStrings.indexOf(note) - 9;
+    const notesFromA4 = noteIndex + (octave - 4) * 12;
+    const expectedFreq = referenceA4 * Math.pow(2, notesFromA4 / 12);
+    const cents = 1200 * Math.log2(frequency / expectedFreq);
+    return Math.round(cents);
+  };
+  
+  // Auto-correlation algorithm for pitch detection
+  const autoCorrelate = (buffer, sampleRate) => {
+    let SIZE = buffer.length;
+    let rms = 0;
+    
+    for (let i = 0; i < SIZE; i++) {
+      const val = buffer[i];
+      rms += val * val;
+    }
+    rms = Math.sqrt(rms / SIZE);
+    
+    if (rms < 0.01) return -1;
+    
+    let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+    for (let i = 0; i < SIZE / 2; i++) {
+      if (Math.abs(buffer[i]) < thres) { r1 = i; break; }
+    }
+    for (let i = 1; i < SIZE / 2; i++) {
+      if (Math.abs(buffer[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+    }
+    
+    buffer = buffer.slice(r1, r2);
+    SIZE = buffer.length;
+    
+    const c = new Array(SIZE).fill(0);
+    for (let i = 0; i < SIZE; i++) {
+      for (let j = 0; j < SIZE - i; j++) {
+        c[i] = c[i] + buffer[j] * buffer[j + i];
+      }
+    }
+    
+    let d = 0;
+    while (c[d] > c[d + 1]) d++;
+    
+    let maxval = -1, maxpos = -1;
+    for (let i = d; i < SIZE; i++) {
+      if (c[i] > maxval) {
+        maxval = c[i];
+        maxpos = i;
+      }
+    }
+    
+    let T0 = maxpos;
+    
+    const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
+    const a = (x1 + x3 - 2 * x2) / 2;
+    const b = (x3 - x1) / 2;
+    if (a) T0 = T0 - b / (2 * a);
+    
+    return sampleRate / T0;
+  };
+  
+  // Update pitch detection
+  const updatePitch = () => {
+    if (!analyserRef.current) return;
+    
+    const analyser = analyserRef.current;
+    const buffer = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(buffer);
+    
+    const frequency = autoCorrelate(buffer, audioContextRef.current.sampleRate);
+    
+    if (frequency > 0 && frequency < 2000) {
+      const { note, octave } = getNote(frequency);
+      const centsOff = getCents(frequency, note, octave);
+      
+      setDetectedNote(`${note}${octave}`);
+      setDetectedFrequency(Math.round(frequency * 10) / 10);
+      setCents(centsOff);
+    }
+    
+    animationFrameRef.current = requestAnimationFrame(updatePitch);
+  };
+  
+  // Start listening
+  const startListening = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 2048;
+      
+      microphoneRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      microphoneRef.current.connect(analyserRef.current);
+      
+      setIsListening(true);
+      updatePitch();
+    } catch (err) {
+      console.error('Error accessing microphone:', err);
+      alert('Please allow microphone access to use the tuner');
+    }
+  };
+  
+  // Stop listening
+  const stopListening = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+    
+    if (microphoneRef.current) {
+      microphoneRef.current.disconnect();
+    }
+    
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+    
+    setIsListening(false);
+    setDetectedNote('');
+    setDetectedFrequency(0);
+    setCents(0);
+  };
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (isListening) {
+        stopListening();
+      }
+    };
+  }, [isListening]);
+  
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 p-4">
+      {currentPage === 'home' && (
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Music className="w-8 h-8 text-purple-600" />
+              <h1 className="text-3xl font-bold text-gray-800">Practice Tracker</h1>
+            </div>
+            <button 
+              onClick={toggleView}
+              className="p-2 hover:bg-purple-50 rounded-lg transition-colors"
+            >
+              <Calendar className="w-6 h-6 text-purple-600" />
+            </button>
+          </div>
+          
+          {/* Weekly Stats */}
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <div className="bg-purple-50 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="w-5 h-5 text-purple-600" />
+                <span className="text-sm text-gray-600">Total Minutes</span>
+              </div>
+              <p className="text-3xl font-bold text-purple-600">{totalMinutes}</p>
+            </div>
+            <div className="bg-blue-50 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Check className="w-5 h-5 text-blue-600" />
+                <span className="text-sm text-gray-600">Days Practiced</span>
+              </div>
+              <p className="text-3xl font-bold text-blue-600">{daysPracticed}/7</p>
+            </div>
+          </div>
+        </div>
+        
+        {/* Weekly Calendar */}
+        {viewMode === 'week' && (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            {/* Week Navigation Header */}
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={goToPreviousWeek}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-6 h-6 text-gray-600" />
+              </button>
+              
+              <div className="text-center">
+                <h2 className="text-xl font-semibold text-gray-800">{getWeekLabel()}</h2>
+                {weekOffset !== 0 && (
+                  <button
+                    onClick={goToCurrentWeek}
+                    className="text-sm text-purple-600 hover:text-purple-700 font-medium mt-1"
+                  >
+                    Go to Current Week
+                  </button>
+                )}
+              </div>
+              
+              <button
+                onClick={goToNextWeek}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-6 h-6 text-gray-600" />
+              </button>
+            </div>
+          
+            <div className="grid grid-cols-7 gap-2">
+              {daysOfWeek.map((day, index) => {
+                const date = weekDates[index];
+                const dayData = getPracticeForDate(date);
+                const isTodayDate = isToday(date);
+                
+                return (
+                  <div key={index} className="text-center">
+                    {/* Day Header */}
+                    <div className={`text-sm font-medium mb-2 ${
+                      isTodayDate ? 'text-purple-600' : 'text-gray-500'
+                    }`}>
+                      {day}
+                    </div>
+                    
+                    {/* Date Circle */}
+                    <div 
+                      onClick={() => openPracticeModal(date)}
+                      className={`
+                        relative aspect-square rounded-xl cursor-pointer transition-all
+                        ${isTodayDate
+                          ? 'bg-purple-100 border-2 border-purple-600' 
+                          : 'bg-gray-50 hover:bg-gray-100'
+                        }
+                        ${dayData.practiced
+                          ? 'ring-4 ring-green-200' 
+                          : ''
+                        }
+                      `}
+                    >
+                      <div className="absolute inset-0 flex flex-col items-center justify-center p-2">
+                        <span className={`text-lg font-semibold ${
+                          isTodayDate ? 'text-purple-600' : 'text-gray-700'
+                        }`}>
+                          {date.getDate()}
+                        </span>
+                        
+                        {dayData.practiced && (
+                          <Check className="w-5 h-5 text-green-600 mt-1" />
+                        )}
+                        
+                        {dayData.minutes > 0 && (
+                          <span className="text-xs text-gray-600 mt-1">
+                            {dayData.minutes}m
+                          </span>
+                        )}
+                      </div>
+                      
+                      {!dayData.practiced && (
+                        <Plus className="absolute top-1 right-1 w-4 h-4 text-gray-400" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          
+            {/* Legend */}
+            <div className="flex gap-4 mt-6 text-sm text-gray-600 justify-center">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-purple-100 border-2 border-purple-600"></div>
+                <span>Today</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gray-50 ring-4 ring-green-200"></div>
+                <span>Practiced</span>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Monthly Calendar */}
+        {viewMode === 'month' && (
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            {/* Month Navigation Header */}
+            <div className="flex items-center justify-between mb-6">
+              <button
+                onClick={goToPreviousMonth}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-6 h-6 text-gray-600" />
+              </button>
+              
+              <div className="text-center">
+                <h2 className="text-2xl font-semibold text-gray-800">{getMonthLabel()}</h2>
+                {monthOffset !== 0 && (
+                  <button
+                    onClick={goToCurrentMonth}
+                    className="text-sm text-purple-600 hover:text-purple-700 font-medium mt-1"
+                  >
+                    Go to Current Month
+                  </button>
+                )}
+              </div>
+              
+              <button
+                onClick={goToNextMonth}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-6 h-6 text-gray-600" />
+              </button>
+            </div>
+            
+            {/* Day Headers */}
+            <div className="grid grid-cols-7 gap-2 mb-2">
+              {daysOfWeek.map(day => (
+                <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+                  {day}
+                </div>
+              ))}
+            </div>
+            
+            {/* Month Grid */}
+            <div className="grid grid-cols-7 gap-2">
+              {getMonthDays().map((dayInfo, index) => {
+                const { date, isCurrentMonth } = dayInfo;
+                const dayData = getPracticeForDate(date);
+                const isTodayDate = isToday(date);
+                
+                return (
+                  <div
+                    key={index}
+                    onClick={() => openPracticeModal(date)}
+                    className={`
+                      relative aspect-square rounded-lg cursor-pointer transition-all p-1
+                      ${!isCurrentMonth ? 'opacity-30' : ''}
+                      ${isTodayDate
+                        ? 'bg-purple-100 border-2 border-purple-600' 
+                        : 'bg-gray-50 hover:bg-gray-100'
+                      }
+                      ${dayData.practiced ? 'ring-2 ring-green-400' : ''}
+                    `}
+                  >
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className={`text-sm font-semibold ${
+                        isTodayDate ? 'text-purple-600' : 'text-gray-700'
+                      }`}>
+                        {date.getDate()}
+                      </span>
+                      
+                      {dayData.practiced && (
+                        <Check className="w-3 h-3 text-green-600 mt-0.5" />
+                      )}
+                      
+                      {dayData.minutes > 0 && (
+                        <span className="text-xs text-gray-600">
+                          {dayData.minutes}m
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Legend */}
+            <div className="flex gap-4 mt-6 text-sm text-gray-600 justify-center">
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-purple-100 border-2 border-purple-600"></div>
+                <span>Today</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 rounded bg-gray-50 ring-2 ring-green-400"></div>
+                <span>Practiced</span>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Start Practice Button */}
+        <button 
+          onClick={() => setCurrentPage('tuner')}
+          className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-lg py-4 rounded-2xl shadow-lg hover:shadow-xl transform hover:scale-[1.02] transition-all mt-6 flex items-center justify-center gap-3"
+        >
+          <Play className="w-6 h-6" fill="white" />
+          Start Practice
+        </button>
+        
+        {/* Practice Detail Modal */}
+        {selectedDay !== null && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+              <h3 className="text-2xl font-bold text-gray-800 mb-4">
+                {selectedDay.toLocaleDateString('default', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </h3>
+              
+              <div className="space-y-4">
+                {/* Minutes Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Practice Time (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={tempMinutes}
+                    onChange={(e) => setTempMinutes(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none"
+                    placeholder="e.g., 60"
+                  />
+                </div>
+                
+                {/* Notes Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Practice Notes
+                  </label>
+                  <textarea
+                    value={tempNotes}
+                    onChange={(e) => setTempNotes(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:outline-none h-24 resize-none"
+                    placeholder="What did you work on today?"
+                  />
+                </div>
+              </div>
+              
+              {/* Buttons */}
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setSelectedDay(null)}
+                  className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={savePracticeDetails}
+                  className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
